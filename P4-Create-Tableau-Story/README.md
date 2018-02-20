@@ -25,6 +25,6 @@ Add animations and filters to make the visualizations more interactive. This dri
 
 ## Resources
 
-[link]https://www.kaggle.com/dorbicycle/world-foodfeed-production/data
-[link]https://www.tableau.com/learn/training
-[link]https://www.tableau.com/blog/learning-example-real-data-visualizations
+https://www.kaggle.com/dorbicycle/world-foodfeed-production/data
+https://www.tableau.com/learn/training
+https://www.tableau.com/blog/learning-example-real-data-visualizations
