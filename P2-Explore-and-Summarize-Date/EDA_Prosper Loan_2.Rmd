@@ -1,0 +1,591 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+Exploratory Data Analysis of Prosper Loan Data
+========================================================
+
+#### C.S.V Divya Madhuri
+
+
+# Abstract
+Prosper is a peer-to-peer lending platform that aims to connect people who need money with those who have money to invest. In this Exploratory Data Analysis, I explore a Prosper dataset containing loan information for over a 100,000 people between the years 2006 and 2013. The data is provided by Udacity as a part of Explore and Summarize Data. This data set contains 113,937 loans with 81 variables on each loan, including loan amount, borrower rate (or interest rate), current loan status, borrower income, borrower employment status, borrower credit history, and the latest payment information. 
+The exploration is divided into 3 analytical segments in increasing order of complexity: Univariate Plots, Bivariate Plots, and Multivariate Plots, as well as a Reflection segment at the end that summarizes my experience and thoughts throughout this EDA.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+# Load all of the packages that you end up using
+# in your analysis in this code chunk.
+
+# Notice that the parameter "echo" was set to FALSE for this code chunk.
+# This prevents the code from displaying in the knitted HTML output.
+# You should set echo=FALSE for all code chunks in your file.
+
+library(ggplot2)
+library(gridExtra)
+library(reshape)
+library(scales)
+library(lattice)
+library(dplyr)
+library(MASS)
+library(tidyr)
+library(psych)
+```
+
+```{r echo=FALSE, Load_the_Data}
+# Load the Data
+pl_data = read.csv('prosperLoanData.csv')
+
+```
+
+# Univariate Plots Section
+
+Let's take a look at the size of this dataset and the datatypes of its variables:
+```{r echo=FALSE, Univariate_Plots1}
+dim(pl_data)
+```
+```{r echo=FALSE, Univariate_Plots2}
+str(pl_data)
+```
+```{r echo=FALSE, Univariate_Plots3}
+summary(pl_data)
+```
+
+
+Let's quickly plot some simple histograms to study various variables :-
+
+```{r echo=FALSE, Univariate_Plots4}
+qplot(x = LoanOriginalAmount, data = pl_data,
+      binwidth = 1000 , colour = I("#424242"), fill = I("#0077C0")) +
+  scale_x_continuous(breaks = seq(0, 35000, 5000)) 
+```
+
+From the histogram, we can see higher counts for loan amounts upto $10000 which means majority of borrowers are looking for smaller loans. The plot is slightly right-skewed with sudden peaks at amounts $5000, $10000, $15000, $20000 and $25000. These sudden peaks make sense; people are likelier to fixate on values that are easy to remember, like those that are factors of 5 and 10, rather than arbitrary values in between.
+
+```{r echo=FALSE, Univariate_Plots5}
+pl_data$IncomeRange <- ordered(pl_data$IncomeRange, levels =c("Not employed",
+  "$0", "$1-24,999", "$25,000-49,999", "$50,000-74,999", "$75,000-99,999", 
+  "$100,000+", "Not displayed"))
+```
+We can now explore IncomeRange as shown below.
+
+```{r echo=FALSE, Univariate_Plots6}
+qplot(x = IncomeRange, data = pl_data) +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+The plot above shows that most people taking loans belong to employed categories and interestingly the unemployed people belongong to categories 'Not employed' and '$0' are present in very less counts. Also there are roughly 800 people who have not provided their income range.
+
+```{r echo=FALSE,warning =FALSE, Univariate_Plots7}
+qplot(x = ProsperRating..Alpha., data = pl_data) +
+ scale_x_discrete(limits = c("HR", "E", "D", "C", "B", "A", "AA"))  
+
+```
+
+This plot shows that more people belong to the high risk categories of HR, E, D, C and B. Also roughly around 20,000 people belong to low risk categories of A and AA.
+
+```{r echo=FALSE,warning =FALSE,Univariate_Plots8}
+rating_categories <- rev(c("HR", "E", "D", "C", "B", "A", "AA"))
+
+pl_data <- pl_data %>% mutate(CreditRating = ifelse(ProsperRating..Alpha. %in% 
+                        rating_categories, as.character(ProsperRating..Alpha.), 
+                          ifelse(CreditGrade %in% rating_categories, 
+                                 as.character(CreditGrade), NA)))
+
+pl_data$CreditRating <- ordered(pl_data$CreditRating, 
+                                labels = rating_categories)
+qplot(x = CreditRating, data = pl_data )
+```
+
+This plot is similar to the one plotted for Prosper rating above. Only difference is that the lowest risk category AA has higher count here than that in Prosper rating plot. This means that credit rating and prosper rating are almost similar kinds of ratings given by Prosper to its borrowers. 
+
+Let's now analyse some background details of the borrower.
+
+```{r echo=FALSE, Univariate_Plots9}
+
+ggplot(aes(x = reorder(BorrowerState, BorrowerState, 
+                       function(x) length(x)),
+           fill = I("#0077C0")),
+       data = pl_data) +
+  geom_bar() +
+  xlab("Borrower State") +
+  coord_flip()
+```
+
+The popular states include California, Florida, New York, Texas and Illinois. Highest number of borrowers are from California perhaps because it is the state where Prosper was founded.
+
+```{r echo=FALSE, Univariate_Plots_10}
+ggplot(aes(x = reorder(Occupation, Occupation,
+                       function(x) -length(x)),
+           fill = I("#0077C0")),
+       data = pl_data) +
+  geom_bar() +
+  xlab("Occupation") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+Interestingly the unclear occupations like other and Professional have higher count of borrowers. This may be because the borrowers didn't want to reveal much about their occupation and instead choose these unclear occupations. . Among the rest of them, relatively popular ones include analysts, accountants, computer programmers, teachers and executives. Prosper has definitely enabled a wide range of working people to either borrow or invest money.
+
+```{r echo=FALSE, Univariate_Plots_11}
+# Convert ListingCategory from numeric to factor variable using the keys given
+# in the Google Spreadsheet.
+labels <- c("Debt Consolidation", "Home Improvement", "Business", 
+            "Personal Loan", "Student Use", "Auto", "Baby & Adoption", 
+            "Boat", "Cosmetic Procedure", "Engagement Ring", "Green Loans", 
+            "Household Expenses", "Large Purchases", "Medical/Dental", 
+            "Motorcycle", "RV", "Taxes", "Vacation", "Wedding", "Other", 
+            "Not Applicable")
+
+pl_data$ListingCategory <- factor(pl_data$ListingCategory..numeric.,
+                                          levels = c(1:6, 8:20, 7, 0),
+                                          labels = labels)
+qplot(x = ListingCategory, data = pl_data, 
+      fill = I("#0077C0")) +
+  scale_y_continuous(limits = c(0, 60000), breaks = seq(0, 60000, 10000)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+Most popular reasons to take a loan are Debt Consolidation, Home Improvement, Buisiness and Personal loan among several other reasons. These reasons seem to be valid and most obvious reasons for taking a loan.
+
+```{r echo=FALSE, Univariate_Plots_12}
+qplot(x = LoanStatus, data = pl_data,
+      fill = I("#0077C0")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+Most loans seem to still be ongoing, which is indicative of their booming growth.
+
+```{r echo=FALSE, warning=FALSE, Univariate_Plots_13}
+# Convert CreditScoreRangeLower and CreditScoreRangeUpper into a single
+# CreditScore value (the average of the two)
+pl_data <- pl_data %>%
+         mutate(CreditScore = CreditScoreRangeLower / 2 +
+                              CreditScoreRangeUpper / 2)
+qplot(x = CreditScore, data = pl_data, binwidth = 20,
+      color = I("#424242"), fill = I("#0077C0")) +
+  scale_x_continuous(limits = c(400, 900), breaks = seq(400, 900, 50))
+```
+
+The plot clearly shows that a majority of the users lie between the 650 and 750 mark, which are decent credit scores and consistent with the previous plots, especially the loan amounts received.
+
+
+Let's now look at the interest rates on loan amounts. There are 3 variables showing the interest rates namely BorrowerAPR, BorrowerRate and LenderYield. The BorrowerAPR is the Borrower's Annual Percentage Rate (APR) for the loan but the BorrowerRate is the interest rate for each month. The LenderYield is how much you actually profited from the investment, which is obtained by converting BorrowerRate into actual money in dollars.
+
+```{r echo=FALSE,warning = FALSE, Univariate_Plots_14}
+p1 <- qplot(x = BorrowerAPR, data = pl_data, binwidth = 0.02,
+      color = I("#424242"), fill = I("#0077C0")) +
+  scale_x_continuous(breaks = seq(0, 0.5, 0.1))
+p2 <- qplot(x = BorrowerRate, data = pl_data, binwidth = 0.02,
+      color = I("#424242"), fill = I("#0077C0")) +
+  scale_x_continuous(breaks = seq(0, 0.5, 0.1))
+p3 <- qplot(x = LenderYield, data = pl_data, binwidth = 0.02,
+      color = I("#424242"), fill = I("#0077C0")) +
+  scale_x_continuous(breaks = seq(0, 0.4, 0.1))
+grid.arrange(p1,p2,p3)
+```
+
+The bulk of the loans seem to be 0.1 to 0.2 , which coincides with the credit rating histograms that show that the majority of the users are in the middle of the risk ratings. The lender yield and BorrowerRate plots are similar to borrower APR because they all represent interest rates. I do notice, however, that the peak count is slightly lower than the one in the borrower APR plot, and I presume it is because of the losses that are made when borrowers default loans or get charged off on late payments.
+
+
+# Univariate Analysis
+
+### What is the structure of your dataset?
+This dataset has  11397 observations belonging to 81 variables. Its really a huge dataset to deal with and so i used about 20 variables among which :-
+
+__Categorical Variables__
+ BorrowerState, Occupation, EmployementStatus, IsBorrowerHomeowner, IncomeRange, CreditGrade, LoanStatus and ListingCategory are the categorical variables analysed here.
+
+__Numerical Variables__
+Term, BorrowerAPR, BorrowerRate, LenderYield, LoanOriginalAmount, EmploymentStatusDuration, StatedMonthlyIncome, DebtToIncomeRatio and ProsperScore are the main numerical variables analysed here.
+
+### What is/are the main feature(s) of interest in your dataset?
+The dataset seems to contain 81 variables. Since it is tedious to explore all 81 variables, i have spotted 20 important variables whose exploration is very necessary. Then i divided these 20 variables into 3 groups, just to make analysis easy :-
+
+1. __Loan-Related variables :__
+   This contains variables Term, LoanOriginalAmount,BorrowerAPR, BorrowerRate, LenderYield, LoanStatus and ListingCategory.
+
+2. __Background details of borrower :__
+   This contains variables which help us to analyse the economic state of borrowers like IncomeRange, StatedMonthlyIncome, EmploymentStatus, EmploymentStatusDuration, IsBorrowerHomeOwner, BorrowerState and Occupation.
+
+3. __Risk variables :__
+   This involves variables like CreditGrade, ProsperRating and ProsperScore which help us analyse which risk category the borrower belongs to.
+
+### What other features in the dataset do you think will help support your investigation into your feature(s) of interest?
+Other features like ListingCreationDate,  LoanOriginationDate, LoanOriginationQuarter etc can also be used to do any time series analysis. 
+### Did you create any new variables from existing variables in the dataset?
+Yes, i Converted CreditScoreRangeLower and CreditScoreRangeUpper into a single variable called CreditScore. I converted ListingCategory..numeric. to a categorical variable called ListingCategory. I created a new variable called CreditRating by combining ProsperRating..Alpha.. and CreditGrade.
+
+### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
+The CreditScore when plotted had outlier at zero and so i had to set limits on x-axis( which is c(400, 900)) to get the correct plot.Other than this no other changes were done as the plots had nearly normal kind of distribution.
+
+-----------
+
+# Bivariate Plots Section
+```{r echo=FALSE, Bivariate_Plots1}
+qplot(x = LoanOriginalAmount, data = pl_data,
+      binwidth = 1000 , colour = I("#424242"), fill = I("#0077C0")) +
+  scale_x_continuous(breaks = seq(0, 35000, 5000)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.1))+
+  facet_wrap(~IncomeRange)
+```
+
+The people of extremely low income categories like Not employed, $0 and $1-24,999 are the ones who really need a loan. But the plot above shows that people of middle income range ($25,000 to $100,000) take larger loans. This may be due to basic salary requirements of the organization to grant a loan, which the low income range don't meet easily and hence might be unable to get a loan.
+
+```{r echo=FALSE, Bivariate_Plots2}
+qplot(x = LoanOriginalAmount, data = pl_data,
+      binwidth = 1000 , colour = I("#424242"), fill = I("#0077C0")) +
+  scale_x_continuous(breaks = seq(0, 35000, 5000)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.1)) +
+  facet_wrap(~EmploymentStatus)
+```
+
+This plot is again evident of above observation that people belonging to employed categories like Employed, Full-time and Self-employed, take larger loan amounts.
+  
+```{r echo=FALSE, Bivariate_Plots3}
+ggplot(aes(IncomeRange,LoanOriginalAmount), data = pl_data) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.3))+
+  geom_boxplot()
+ 
+```
+
+As the IncomeRange increases, the borrowed median LoanOriginalAmount also increased.
+
+```{r echo=FALSE,warning = FALSE , Bivariate_Plots4}
+ggplot(aes(x = ProsperRating..Alpha., y = CreditScore,
+           fill = I("#F5F5F5"), color = I("#506E86")), 
+       data = pl_data) +
+  geom_boxplot(lwd = 0.75, outlier.color = I("#FBB448"), outlier.shape = 1) +
+  scale_x_discrete(limits = c("HR", "E", "D", "C", "B", "A", "AA")) +
+  coord_cartesian(ylim = c(600, 950))
+ 
+```
+
+A person's credit score is one of the key factors in determining their Prosper Rating, so it's no surprise that as we climb the rating categories, the credit score of the borrowers also tend to increase.I see that 'HR' has a slightly higher median and IQR than 'E' despite being a riskier category - in fact, it's on par with borrowers with a 'D' rating. Let's take a quick look at their summaries to check the details:
+
+```{r echo=FALSE,warning = FALSE, Bivariate_Plots5}
+by(pl_data$CreditScore, pl_data$ProsperRating..Alpha., summary)
+```
+
+Now we can see that the medians of 'HR' and 'D' are the same, and the mean differs by just 3.3 to 'D'. The median of 'E', on the other hand, is sandwiched between these two categories with a credit score median of 20 below.
+
+Credit Score is one of the factors of Prosper's rating categories, and these categories, along with some other financial information, determine the Annual Percentage Rate that a will apply to the borrower's loan. So let's see how the APR changes as the categories get less risky:
+
+```{r echo=FALSE, warning = FALSE, Bivariate_Plots6}
+ggplot(aes(x = ProsperRating..Alpha., y = BorrowerAPR * 100,
+           fill = I("#F5F5F5"), color = I("#506E86")),
+      data = subset(pl_data, !is.na(BorrowerAPR))) +
+  geom_boxplot(lwd = 0.75, outlier.colour = I("#FBB448"), outlier.shape = 1) + 
+  scale_x_discrete(limits = c("HR", "E", "D", "C", "B", "A", "AA")) +
+  ylab("Borrower APR")
+```
+
+The boxplots above show the relationship between borrower's Prosper rating and their assigned Annual Percentage Rate (APR). It's very clear that as we go down the ladder of risk - from a 'High Risk' to an 'AA' rating - the APR for the borrower reduces drastically.
+The variation in APRs also decreases as the loans get less riskier as displayed by the decreasing size of the boxes in the boxplots when going from 'HR' to 'AA'. There is also a reduction in the number of outliers, which is visible by the shortening lines of yellow rings.
+
+
+Let's see how Prosper rating affects the LoanOriginalAmount :-
+
+```{r echo=FALSE,warning = FALSE, Bivariate_Plots7}
+ggplot(aes(x = ProsperRating..Alpha., y = LoanOriginalAmount,
+           fill = I("#F5F5F5"), color = I("#506E86")),
+      data = pl_data) +
+  geom_boxplot(lwd = 0.75, outlier.colour = I("#FBB448"), outlier.shape = 1) + 
+  scale_x_discrete(limits = c("HR", "E", "D", "C", "B", "A", "AA")) 
+  
+```
+
+As expected, the groups of higher risk took lower loan amount and the groups C, B and A had the same median loan amounts. The lowest risk group AA shows highest median loan amount.
+
+Let's plot some line plots now to see if there is any trend between any variables.
+Since providing loans is Prosper's business, a good thing to check would be how many loans they've coordinated over time (i.e. from 4th quarter 2005 to 1st quarter 2014).Before I start plotting, however, I'm going to make a new dataset that organizes the information I need. We can use the 'tidyr' package, to rename some variables and structure some values to be more conceivable.
+
+```{r echo=FALSE, Bivariate_Plots8}
+# Convert LoanOriginationQuarter to begin with the year using tidyr
+# This also makes sure that any plot axis will put it in increasing order
+# of year
+
+pl_data$LoanOriginationQuarter <- as.character(pl_data$LoanOriginationQuarter)
+pl_data <- pl_data %>%
+         separate (col = LoanOriginationQuarter,
+                   into = c("Quarters", "Year"), sep = " ") %>%
+         unite(col = LoanOriginationQuarter, Year, Quarters, sep = " ")
+
+pl_data$LoanOriginationQuarterF <- factor(pl_data$LoanOriginationQuarter)
+loans_origination <- pl_data %>% 
+                   dplyr::select(Quarter = LoanOriginationQuarter, 
+                                 Amount = LoanOriginalAmount) %>%
+                     group_by(Quarter) %>%
+                       summarise(Loans = n() / 1000,
+                                 Dollars = sum(Amount) / 1000000) %>%
+                      arrange(Quarter)
+
+ggplot(aes(x = Quarter, y = Loans), data = loans_origination) +
+ geom_bar(stat = "identity", fill = I("#0077C0")) + 
+  geom_text(aes(label = round(Loans, 1)), vjust = -0.5, size = 4) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  ylab("Loans (Thousands)")
+ 
+```
+
+We can see the steady growth in number of loans from around 300 in 2006 Q1 to about 3100 two years later (2008 Q1) - a tenfold increase! But there's a huge slump in the end of 2008, and which continues for the next 3 quarters (there's no data for 2009 Q1).
+Post 2009, we can see the dramatic rise in the number of loans that were brokered, when Prosper went from around 1200 in the beginning of 2010 to 14,400 in just a mere 4 years. They were plagued by a lot of defaults in their early years, however, leading to lowering investor confidence, so it will be interesting to see if these changes have improved the success rate of loan completions in their marketplace. We'll explore this over the course of this EDA (and some other stuff).
+
+```{r echo=FALSE, Bivariate_Plots9}
+ggplot(aes(x = Quarter, y = Dollars), data = loans_origination) +
+  geom_bar(stat = "identity", fill = I("#FFA500")) +
+  geom_text(aes(label = round(Dollars, 0)), vjust = -0.5, size = 4) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  ylab("Dollars Loaned (Millions)")
+```
+
+This plot is the same as the previous one, but with Dollar amounts instead of number of loans. Now both plots clearly show the increasing quantity of loans (and amount loaned) being organized by Prosper, which is an indicator of a growing business. 
+
+Finally let's look at how the loans are being defaulted.
+
+```{r echo=FALSE, Bivariate_Plots_10}
+summary(pl_data$LoanStatus)
+```
+
+
+```{r echo=FALSE, Bivariate_Plots_11}
+pl_data <- pl_data %>%
+  mutate(LoanStatusGroup = ifelse(LoanStatus %in% 
+                                  c("Cancelled", "Chargedoff", "Defaulted"), 0,
+                           ifelse(LoanStatus %in%
+                                  c("Current", "FinalPaymentInProgress"), 2,
+                           ifelse(LoanStatus %in%
+                                  c("Completed"), 3,
+                                  1))))
+
+pl_data$LoanStatusGroup <- factor(pl_data$LoanStatusGroup, levels = 0:3,
+                                labels = c("Defaulted", "Past Due", 
+                                           "Current", "Completed"))
+
+loans_defaultrate <- pl_data %>%
+  filter(LoanStatusGroup != "Current" & LoanStatusGroup != "Past Due") %>%
+  group_by(Quarter = LoanOriginationQuarterF, LoanStatusGroup) %>%
+  summarise(Loans = n()) %>%
+  mutate(Rate = Loans / sum(Loans))
+
+ggplot(aes(x = Quarter, y = Rate * 100, group = LoanStatusGroup), 
+       data = subset(loans_defaultrate, LoanStatusGroup == "Defaulted")) +
+  geom_line(size = 0.9) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  stat_smooth(method = "lm", size = 0.7) +
+  ylab("Default Percentage")
+```
+
+I can see that between 2006 and 2008, the default rate hovered between 30%-40% - a pretty high rate. Once again, we see that drop, but it does not go to zero this time, and we can now see that during that period (which also happens to be after the financial crisis) there were borrowers unable to pay back their loans. I will discuss more about it in final plots section.
+
+# Bivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
+The main variables of interest are LoanOriginalAmount, BorrowerAPR, Prosper rating, LoanOriginationQuarter and LoanStatus. The plots shown above reveal following relationships between these variables :-
+
+1. The people of middle income range ($25,000 to $100,000) take larger loans than the income less groups.
+
+2. The people belonging to employed categories like Employed, Full-time and Self-employed, take larger loan amounts compared to unemployed categories.
+
+3. As the IncomeRange increases, the borrowed median LoanOriginalAmount also increased.
+
+4. The groups of higher risk took lower loan amount i.e LoanOriginalAmount and the groups C, B and A had the same median loan amounts. The lowest risk group AA shows highest median loan amount.
+
+5. The quantity of loans granted (LoanOriginalAmount) increases with LoanOriginationQuarter and this shows good growth of Prosper in lending loans.
+
+### Did you observe any interesting relationships between the other features (not the main feature(s) of interest)?
+Other than the main variables, when i plotted AmountDelinquent vs DelinquenciesLast7Years and faceted it by EmploymentStatus, i found that the employed categories showed delinquencies or owed more money than the unemployed categories.
+### What was the strongest relationship you found?
+The stongest relation showed by the plots was the one between Loan Amounts vs Quarter grouped by the LoanStatusGroups. This plot showed that the quanity of loans granted increased strongly between 2009 Q2 to 2014 Q1.
+
+----------
+
+# Multivariate Plots Section
+Let's now plot a scatterplot matrix to see relationships betwwen multiple variables at once. I'am first going to subset the dataset by taking only few variables and exclude the categorical variables.
+
+```{r echo=FALSE,warning = FALSE, fig.width= 12, fig.height= 12, Multivariate_1}
+theme_set(theme_minimal(20))
+set.seed(1234)
+pl_subset <- pl_data %>%
+  dplyr:: select(BorrowerAPR,LoanStatus, LoanOriginalAmount, 
+                 ProsperRating..numeric., CreditGrade, DelinquenciesLast7Years, 
+                 AmountDelinquent,  IncomeRange,  Term , Occupation,
+                 EmploymentStatus, DebtToIncomeRatio, Investors, 
+                 TotalProsperLoans,TotalCreditLinespast7years)
+
+pairs.panels(pl_subset, 
+             method = "pearson", # correlation method
+             hist.col = "#00AFBB",
+             density = TRUE,  # show density plots
+             ellipses = TRUE # show correlation ellipses
+             )
+
+```
+
+We can see that BorrowerAPR has highest negative correlation with Prosper rating which again proves our earlier observation that higher risk groups have to pay larger interest rates than lower risk groups.  BorrowerAPR shows negative correlation with investors i.e greater the interest rates lower the number of investors. Investors increase as LoanOriginalAmount increases, which is again an obvious observation. LoanStatus is negatively correlated with CreditGrade which is because lower risk groups don't get loans easily granted. Rest of the variables don't show any correlation.
+
+When analyzing loan services, we must also look at the quality of the loans. Increase in growth of loan originations is not constructive if most of the loans are being defaulted or charged off. So that's what I'm going to create in the next plot: loan originations coloured by the status of the loan.
+
+
+
+I see that there are 6 'Past Due' factors based on how late the borrowers are with their payments, but it will be much more useful visually if they're grouped as one.
+
+```{r echo=FALSE, fig.width = 11,fig.height= 6, Multivariate_Plots2}
+loans_defaults <- pl_data %>% 
+  group_by(Quarter = LoanOriginationQuarter, LoanStatusGroup) %>%
+  summarise(Loans = n() / 1000) %>%
+  arrange(Quarter, LoanStatusGroup)
+
+ggplot(aes(x = Quarter, y = Loans, fill = LoanStatusGroup), 
+       data = loans_defaults) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  ylab("Loans (Thousands)") +
+  scale_fill_manual(values = c("#FA4659","#FBB448", "#0C9CEE", "#2EB872"))
+```
+
+Now this plot provides us a lot of information. Not only do we see the growth of the company through it's increasing loan openings, but we can also see the performance of loans over time. I've specifically chosen the colours for the plot - the red to yellow to green denote a progression from worse to better, and the light blue represents ongoing loans that will either end up being completed or defaulted in the future.
+
+```{r echo=FALSE, fig.width = 11,fig.height= 6, Multivariate_Plots3 }
+ggplot(aes(x = Quarter, y = Loans, 
+           group = LoanStatusGroup, color = LoanStatusGroup),
+       data = loans_defaults) +
+  geom_line(aes(group = LoanStatusGroup, color = LoanStatusGroup), 
+            size = 2) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  ylab("Loans (Thousands)") +
+  scale_color_manual(values = c("#FA4659","#FBB448", "#0C9CEE", "#2EB872"))
+```
+
+This plot shows the same time series data from the plot above, but with a line instead of a stacked bar chart.
+
+```{r echo=FALSE,warning = FALSE, Multivariate_Plots4}
+ggplot(aes(x = DelinquenciesLast7Years, y = AmountDelinquent),
+       data = filter(pl_data, AmountDelinquent > 0 & 
+                            EmploymentStatus != "Other" )) +
+  geom_point() +
+  xlim(0, quantile(pl_data$DelinquenciesLast7Years, 0.99, na.rm = T)) +
+  ylim(0, quantile(pl_data$AmountDelinquent, 0.99, na.rm = T)) +
+  facet_wrap(~EmploymentStatus)
+```
+
+This plot doesn't reveal much. I wanted to see the relationship between the amount borrowers were delinquent and the number of delinquencies they've had over the last 7 years. I then separated that by employment status to see if people that weren't full employed had higher delinquencies or owed more money. The overplotting and general dispersion of data doesn't really reveal the trend I hypothesized.
+
+```{r echo=FALSE,warning= FALSE, Multivariate_Plots5}
+loans_status <- pl_data %>%
+  filter(LoanStatus %in% c("Completed", "Defaulted")) %>%
+  dplyr::select(DebtToIncomeRatio, CreditScore, LoanStatus, 
+         LoanOriginationQuarter)
+
+ggplot(aes(x = DebtToIncomeRatio, y = CreditScore,
+           alpha = 0.05, color = LoanStatus),
+       data = loans_status) +
+  geom_point() +
+  coord_cartesian(ylim = c(400, 900)) +
+  scale_color_manual(values = c("#2EB872", "#FA4659"))
+```
+
+In this scatter plot, I notice that there is a lot of overplotting at the low end of the debt to income ratio, and a disctint line of points at a ratio of 10, with a sparse no-man's land in between. The plot isn't very informational. I notice that the defaulters tend to have lower credit scores - around 600 and below - displayed by the sea of red. Past 600 it seems mostly green, but once again it's awfully overplotted and since I don't see any other trends, I won't take this any further.
+
+```{r echo=FALSE, Multivariate_Plots6}
+# Join the CreditGrade (which stores credit rating pre-2009) and 
+# ProsperRating..Alpha. (which stores credit rating post-2009) to make one 
+# variable called CreditRating . They aren't exactly the same thing, but 
+# they're reasonably close and it makes plotting time series data easier.
+
+ggplot(aes(x = LoanOriginalAmount, y = LenderYield,
+           color = as.integer(factor(CreditRating)), group = CreditRating),
+       data = pl_data) +
+  geom_jitter() +
+  scale_color_gradient2(high = "#FA4659", midpoint = 4, mid = "#FBB448",
+                       low = "#2EB872",
+                       breaks = seq(1, 7, 1),
+                       labels = rating_categories,
+                       limits = c(1, 7),
+                       name = 'Category of Risk') +
+  facet_wrap(~LoanStatusGroup, ncol = 2) +
+  theme(legend.key.width = unit(1, "cm"))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
+
+                       
+This plot shows the relationship between a lender yield on the loan and the amount that a borrower has loaned. I then made individual graphs to show that relationsip based on the status of the loan - Defaulted, Past Due, Current and Completed - and finally coloured it based on risk rating.
+
+# Multivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
+1. The scatterplot matrix plotted above strengthens our previous observation that BorrowerAPR is higher for high risk groups as compared to low risk ones. The BorrowerAPR was found to be higher for higher risk groups compared to low risk groups. The lowest risk group AA had the lowest median BorrowerAPR.
+
+2. The quality of loans given increased over each quarter and there are more loans in the 'Completed' and 'Current' categories.
+
+3. LenderYield vs LoanOriginalAmount plot grouped by risk rating shows that high risk groups tend to take lower loan amounts but have higher lender yield whereas the low risk groups take higher loan amounts at lower lenderyields.
+
+### Were there any interesting or surprising interactions between features?
+There were no such interesting interactions found between the variables in the analysis carried out here.
+
+------
+
+# Final Plots and Summary
+
+### Plot One
+```{r echo=FALSE, fig.width = 9, Plot_One}
+qplot(x = LoanOriginalAmount, data = pl_data,
+      binwidth = 1000 , colour = I("#424242"), fill = I("#0077C0")) +
+  scale_x_continuous(breaks = seq(0, 35000, 5000)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  facet_wrap(~IncomeRange)+
+  ggtitle('Loan amounts for various Income ranges')
+```
+
+### Description One
+IncomeRange is always an important parameter to judge whether a person is good at repaying the loans back. Faceting the above plot of loan amount using IncomeRange reveals a useful observation that people of middle income range ($25,000 to $100,000) take larger loans.But people of extremely low income categories like Not employed, $0 and $1-24,999 are the ones who really need a loan. This may be due to basic salary requirements of the organization to grant a loan, which the low income range don't meet and hence not able to get a loan.
+
+### Plot Two
+```{r echo=FALSE,fig.width = 11, fig.height= 6 ,Plot_Two}
+ggplot(aes(x = Quarter, y = Loans, fill = LoanStatusGroup), 
+       data = loans_defaults) +
+  geom_bar(stat = "identity") +
+  ggtitle("Status of all Loans through Financial Year '13") +
+  theme(plot.title = element_text(lineheight = 0.8, face = "bold"), 
+        axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  ylab("Loans (Thousands)") +
+  scale_fill_manual(values = c("#FA4659","#FBB448", "#0C9CEE", "#2EB872"))
+```
+
+### Description Two
+I have chosen this plot because of it's combination of detail and simplicity. It makes for an easy way to evaluate the performance of Prosper laons.First let's look at pre-2009. They were still a young company at the time, and we can see that with the sub-5000 loans per quarter figure. More importantly, though, all the loans originated at the time are either completed or defaulted (i.e. none are still ongoing). Now I can compare the relative sizes of the red and green bars, and I can easily tell that approximately half, or a bit less that half the loans that were granted, defaulted.
+
+That's not good, especially when they have to convince investors that they're making solid investments. Now let's look at post-2009. Right when they restarted servicing loans, for about the next year, we can see that the size of the red bar is much smaller relative to the green bar. That tells me that their minimum credit policy seems like it's working - defaults look pretty low in number.
+
+I chose to look at only the next year because there seem to be no, or an insignificant amount of loans still currently active. After that - 2011 onwards - we see the number of loans being originated rise tremendously. The red bar to green bar ratio seems to be increasing slowly, but it's difficult to tell with the growing 'Current' blue bar in between. But a few questions arise - how many of those current loans will end up in the green, completed group in the future? How many will instead dive into the yellow of 'Past Due'? And out of those, how many will make it out and enter green, and how many will fall into the dreadful red of 'Defaulted'?
+
+It's difficult to say whether their new policies have improved investment quality - the first year certainly suggests so, but scaling up quickly invariably leads to some new problems. Only time can tell what color the blues in the plot will convert to.
+
+### Plot Three
+```{r echo=FALSE, fig.width = 8,Plot_Three}
+ggplot(aes(x = Quarter, y = Rate * 100, group = LoanStatusGroup), 
+       data = subset(loans_defaultrate, LoanStatusGroup == "Defaulted")) +
+  geom_line(size = 0.9) +
+  ggtitle("Default Rate through Financial Year '13") +
+  theme(plot.title = element_text(lineheight = 0.8, face = "bold"),
+        axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  stat_smooth(method = "lm", size = 0.7) +
+  ylab("Default Percentage")
+```
+
+### Description Three
+I have chosen this plot because of the vast range of questions it can answer. I can immediately see that the defaulted category doesn't have any loans more than about $25,000. In fact, even in the Past Due and Completed sections, there aren't a lot of loans above around the $25,000 mark. In the Current category, however, I see much more loans being taken past the $25,000 mark and even past the $30,000 mark and veering towards the maximum of $35k.
+
+With the colouring, I see that the Defaulted and Completed categories look quite haphazard. In fact for defaulted loans, the bold red of High Risk is plastered all over the yield range, which is contrasting to the other 3 categories where the yield tends to be around 35-40%.
+
+I personally like the Current category because of the neat, ordered rows of colours. One thing that I had pointed out before, and is very apparent here, is that the 'A' rating seems to get lower yields. I also see that borrowers with a riskier rating tend to go for lower loan amounts, which makes sense because they're afraid of not being able to pay them off should any unfortunate circumstances take place, like losing a job, say. Also, it's unlikelier for their loan listing will be accepted should they choose a high amount.
+
+This plot always a direct comparison between Defaulted and Completed loans that we can compare. For example, I see that 'A' rated loans seem scarce compared to 'AA' rated loans in the Defaulted category, wheras in the Completed category they seem more or less even. I also see that there are very little 'HR' rated loans in the Current category - could it be because of Prosper's new minimum credit score? The same amount seems to be in the Past Due section, and from Plot One we can see that there are very few total loans in that category.
+
+------
+
+# Reflection
+Starting as a beginner in data analysis, i feel that my experience is very less to deal with datasets having large number of variables like this one. I started this project thinking that i would easily get through it with utter ease, but it was not so. Skimming through the large set of features and collecting the ones which are really important to my analysis was the starting point. Then i used plots of various kinds like histogram, bar-chart, line graph, scatterplot etc. Initially when i took each variable to analyse, many of them didn't show a clear picture of any useful trend. Then when i took pairs of variables to analyse, i started seeing plots showing relationships between the variables. This made me gain more interest in pursuing this project. 
+
+Later i thought of plotting 3 variables together and then took my exploration further and gained some insights from them.The main problem I ran into this dataset was overplotting. A lot of the time, I would hypothesize a relationship and then plot the data to check if it was true or not, but most of the time the sheer amount of data (and it's variation) would disguise any trend that may exist. A solution would be to sample the data, but I chose not to do that this time (and opted instead for colouring it).
+
+I've just mentioned a few questions that can be answered through this exploration but i feel there are still many other questions, and I'm sure there are answers to questions I haven't even thought of. There are a number of different ways to take this project further. Firstly, I've focused on a small subset of the variables available in the dataset, and there is a vast amount of data I've chosen not to explore. I think I'd like to explore the investors side a bit more; look at investor profit and losses and their general activity in the peer-to-peer lending industry. Also, I would like to learn about the kind of plots and graphs specifically used by the finance industry, so that I can incorporate that knowledge into any future datasets I may explore. Lastly, although I haven't learned it yet, I'd like to incorporate a machine learning algorithm into my exploration to predict the number of ongoing loans that will end up being defaulted. I believe that an accurate model will be very beneficial to Prosper, so it's definitely something I'd like to look into, in the near future.
